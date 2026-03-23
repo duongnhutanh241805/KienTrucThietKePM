@@ -1,0 +1,22 @@
+# Stage 1: install deps
+FROM node:18 AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+
+# Stage 2: production
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install --only=production
+
+COPY --from=builder /app/index.js ./index.js
+
+CMD ["node", "index.js"]
