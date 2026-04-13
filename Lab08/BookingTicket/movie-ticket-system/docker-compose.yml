@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # ─── Message Broker ───────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # Management UI: http://localhost:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── User Service ─────────────────────────────────────────
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    ports:
+      - "8081:8081"
+    environment:
+      PORT: 8081
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      JWT_SECRET: movie_ticket_secret_2024
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  # ─── Movie Service ────────────────────────────────────────
+  movie-service:
+    build: ./movie-service
+    container_name: movie-service
+    ports:
+      - "8082:8082"
+    environment:
+      PORT: 8082
+
+  # ─── Booking Service ──────────────────────────────────────
+  booking-service:
+    build: ./booking-service
+    container_name: booking-service
+    ports:
+      - "8083:8083"
+    environment:
+      PORT: 8083
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      MOVIE_SERVICE_URL: http://movie-service:8082
+      JWT_SECRET: movie_ticket_secret_2024
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      movie-service:
+        condition: service_started
+
+  # ─── Payment + Notification Service ──────────────────────
+  payment-notification-service:
+    build: ./payment-notification-service
+    container_name: payment-notification-service
+    ports:
+      - "8084:8084"
+      - "8085:8085"
+    environment:
+      PAYMENT_PORT: 8084
+      NOTIFICATION_PORT: 8085
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  # ─── Frontend ─────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - user-service
+      - movie-service
+      - booking-service
